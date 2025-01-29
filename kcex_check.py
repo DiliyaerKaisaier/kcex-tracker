@@ -1,43 +1,57 @@
-import requests
 import smtplib
-from email.mime.text import MIMEText
+import requests
 import re
 import os
+from email.mime.text import MIMEText
 
-# KCEX 上币信息页面
+# KCEX 上币信息页面（真实链接）
 URL = "https://support.kcexhelp.com/hc/zh-tw/categories/25312022640409-%E4%B8%8A%E5%B9%A3%E4%BF%A1%E6%81%AF"
 
 # 从 GitHub Secrets 读取邮件配置信息
-SMTP_SERVER = os.getenv("SMTP_SERVER")  # SMTP 服务器，如 smtp.qq.com
+SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.qq.com")  # SMTP 服务器
 SMTP_PORT = int(os.getenv("SMTP_PORT", 465))  # 465 (SSL) 或 587 (TLS)
 SENDER_EMAIL = os.getenv("SENDER_EMAIL")  # 发送方邮箱
-SENDER_PASSWORD = os.getenv("SENDER_PASSWORD")  # 邮箱 SMTP 授权码
+SENDER_PASSWORD = os.getenv("SENDER_PASSWORD")  # SMTP 授权码
 RECEIVER_EMAIL = os.getenv("RECEIVER_EMAIL")  # 接收方邮箱
 
 # 爬取 KCEX 上币公告
 def get_latest_kcex_news():
-    response = requests.get(URL)
-    content = response.text
+    try:
+        response = requests.get(URL)
+        response.raise_for_status()  # 确保请求成功
+        content = response.text
 
-    # 使用正则匹配上币公告
-    matches = re.findall(r'<a href="(\/hc\/zh-tw\/articles\/\d+-.*?)".*?>(.*?)<\/a>', content)
+        # 使用正则匹配公告标题和链接
+        matches = re.findall(r'<a href="(\/hc\/zh-tw\/articles\/\d+-.*?)".*?>(.*?)<\/a>', content)
 
-    if matches:
-        latest_title, latest_link = matches[0]
-        latest_link = "https://support.kcexhelp.com" + latest_link
-        return latest_title, latest_link
+        if matches:
+            latest_link, latest_title = matches[0]
+            latest_link = "https://support.kcexhelp.com" + latest_link
+            return latest_title, latest_link
+    except requests.RequestException as e:
+        print(f"❌ 请求 KCEX 页面失败: {e}")
     return None, None
 
-# 发送邮件通知
+# 发送邮件
 def send_email(subject, body):
     msg = MIMEText(body, "plain", "utf-8")
     msg["From"] = SENDER_EMAIL
     msg["To"] = RECEIVER_EMAIL
     msg["Subject"] = subject
 
-    with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
+    try:
+        print("🔄 正在连接 SMTP 服务器...")
+        server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.sendmail(SENDER_EMAIL, RECEIVER_EMAIL, msg.as_string())
+        print("✅ 邮件发送成功！")
+    except smtplib.SMTPException as e:
+        print(f"❌ SMTP 发送失败: {e}")
+    finally:
+        try:
+            server.quit()
+        except:
+            pass  # 避免 quit() 时报错
 
 # 主函数
 def main():
