@@ -3,6 +3,8 @@ name: KCEX Tracker
 on:
   schedule:
     - cron: "*/15 * * * *"  # 每 15 分钟运行一次
+  workflow_dispatch:  # 允许手动触发
+
 
 jobs:
   run:
